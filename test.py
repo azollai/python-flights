@@ -1,7 +1,6 @@
 print("Loading...")
 
 from typing import List
-from xmlrpc.client import boolean
 from ryanair2 import Ryanair,Flight
 from datetime import date, datetime, timedelta
 from enum import Enum, IntEnum
@@ -30,7 +29,11 @@ GOOD_DAYS:list[GoodDay] = [
     {"start":Day.SATURDAY,"end":Day.SUNDAY},
     {"start":Day.SATURDAY,"end":Day.MONDAY},
     {"start":Day.SUNDAY,"end":Day.MONDAY},
-    {"start":Day.SUNDAY,"end":Day.TUESDAY}
+    {"start":Day.SUNDAY,"end":Day.TUESDAY},
+    {"start":Day.FRIDAY,"end":Day.MONDAY},
+    {"start":Day.FRIDAY,"end":Day.TUESDAY},
+    {"start":Day.THURSDAY,"end":Day.SUNDAY},
+    {"start":Day.THURSDAY,"end":Day.MONDAY},
 ]
 LEAVE_HOUR = {"from":7,"to":11}
 ARRIVE_BACK_HOUR ={"from":18,"to":21}
@@ -72,18 +75,14 @@ def printCheapFlights(flights:list[Flight],price:int):
     _flights = filter(lambda f:f!=None and f.price<price,flights)
     printFlights(_flights)
 
-def lookUpPerfectTrips(flights: List[Flight],good_days:list[GoodDay],leave_hour:int,arrive_back_hour:int,max_price:int)->list[Trip]:
+def lookUpPerfectTrips(there_flights: List[Flight],back_flights: List[Flight],good_days:list[GoodDay],leave_hour:int,arrive_back_hour:int,max_price:int)->list[Trip]:
     perfect_trips:list[Trip] = []
 
-    for start_flight_idx, start_flight in enumerate(flights):
-        #print(start_flight_idx)
-        #print(start_flight)
-
-
+    for start_flight in there_flights:
         for good_day in good_days:
             if doesGoodDayMatchStartFlight(good_day,start_flight) == False:
                 continue
-            end_flight:Flight = getEndFlight(flights, start_flight, start_flight_idx, good_day)
+            end_flight:Flight = getEndFlight(back_flights, start_flight, good_day)
             if end_flight == None:
                 continue
 
@@ -103,12 +102,14 @@ def lookUpPerfectTrips(flights: List[Flight],good_days:list[GoodDay],leave_hour:
     
     return perfect_trips
 
-def getEndFlight(flights:list[Flight], start_flight:Flight, start_flight_idx, good_day:GoodDay)->Flight:
+def getEndFlight(back_flights:list[Flight], start_flight:Flight, good_day:GoodDay)->Flight:
      diff_in_days = getDifferenceInDays(good_day)
-     end_flight_idx = start_flight_idx + diff_in_days
-     if end_flight_idx > len(flights) - 1:
-        return None
-     return flights[start_flight_idx + diff_in_days]
+     end_date:datetime = (start_flight.departureTime + timedelta(days = diff_in_days))
+     end_flight:Flight = None
+     for f in back_flights:
+        if f.departureTime.year == end_date.year and f.departureTime.month == end_date.month and f.departureTime.day == end_date.day:
+            end_flight = f
+     return end_flight
 
 def doesGoodDayMatchStartFlight(good_day:GoodDay, start_flight:Flight)->bool:
     #print(good_day,start_flight)
@@ -129,21 +130,28 @@ def printPerfectTrips(trips:list[Trip]):
         printFlights([t["start"],t["end"]])
         print("")
 
+def getFlights(fro:str, to:str, _dates:list[date], _date_to_use:str, _ingest:bool)->list[Flight]:
+    flights = []
+    if ingest:
+        flights = getAllFlights(fro,to,_dates)
+        saveData(fro,to,flights,_date_to_use)
+    else:
+        flights = loadData(fro,to,_date_to_use)
+    return flights
 
-dates = getAllDatesBetween(date(2022,8,1),date(2022,10,30))
+dates = getAllDatesBetween(date(2023,1,1),date(2023,3,1))
 FROM = "CPH"
-TO = "FCO"
-ingest = False
-date_to_use = "23-07-22"
+TO = "VCE"
+ingest = True
+date_to_use = TODAY
 
-flights = []
-if ingest:
-    flights = getAllFlights(FROM,TO,dates)
-    saveData(FROM,TO,flights,date_to_use)
-else:
-    flights = loadData(FROM,TO,date_to_use)
+there_flights = getFlights(FROM,TO,dates,date_to_use,ingest)
+back_flights = getFlights(TO,FROM,dates,date_to_use,ingest)
 
-#printFlights(flights)
+print("THERE_FLIGHTS")
+printFlights(there_flights)
+print("BACK_FLIGHTS")
+printFlights(back_flights)
 #printCheapFlights(flights,200)
-perfect_trips = lookUpPerfectTrips(flights,GOOD_DAYS,10,15,500)
+perfect_trips = lookUpPerfectTrips(there_flights,back_flights,GOOD_DAYS,20,5,600)
 printPerfectTrips(perfect_trips)
